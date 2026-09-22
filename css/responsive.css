@@ -1,0 +1,134 @@
+/* ============================================================
+   css/responsive.css — desktop/laptop/tablet/mobile
+   No horizontal page-level scrolling (tables scroll in place).
+   ============================================================ */
+
+@media (max-width: 1080px) {
+  .intel__grid,
+  .geo__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .intel__grid .chart-card,
+  .geo__grid .chart-card {
+    min-height: 300px;
+  }
+
+  .trend__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .trend__bars {
+    grid-column: 1 / -1;
+    height: 220px;
+  }
+}
+
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .hero__panel {
+    min-width: 0;
+  }
+
+  .kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .filters__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  :root {
+    --head-h: 58px;
+  }
+
+  .site-head {
+    flex-wrap: wrap;
+    padding-block: 10px;
+    gap: 6px;
+  }
+
+  .site-head .brand__fest {
+    display: none;
+  }
+
+  .site-nav {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
+    gap: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 8px;
+  }
+
+  .site-nav a {
+    font-size: 0.82rem;
+    padding: 6px 2px;
+  }
+
+  .profile__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .trend__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-item {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .activity-item__num {
+    font-size: 1.1rem;
+  }
+
+  .filters__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pulse__readout {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .pulse__nums {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .hero__word {
+    font-size: clamp(2.6rem, 13vw, 4rem);
+  }
+
+  .filters__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-card--tall {
+    min-height: 260px;
+  }
+
+  .site-foot {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  /* Controlled column hiding on small screens: the table still scrolls
+     inside .table-scroll, but we drop low-priority visual noise. */
+  .reg-table th:nth-child(5),
+  .reg-table td:nth-child(5) {
+    display: none;
+  }
+}

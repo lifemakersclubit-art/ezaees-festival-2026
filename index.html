@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="لوحة تحليل ذكية لتسجيلات مهرجان Ezaees 2026 — نوادي صناع الحياة بالجامعات المصرية" />
+  <title>EZAEES Festival 2026 — Registration Intelligence</title>
+  <meta name="theme-color" content="#014976" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/logo/mark.svg" />
+
+  <!-- Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;700;800;900&display=swap" rel="stylesheet" />
+
+  <!-- Local decorative font (optional). Drop the file in assets/fonts/. -->
+  <style>
+    @font-face {
+      font-family: 'Arslan';
+      src: url('assets/fonts/Arslan.ttf') format('truetype');
+      font-weight: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Arslan';
+      src: url('assets/fonts/ArslanBold.ttf') format('truetype');
+      font-weight: 700;
+      font-display: swap;
+    }
+  </style>
+
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/dashboard.css" />
+  <link rel="stylesheet" href="css/responsive.css" />
+</head>
+<body>
+
+  <div class="grain" aria-hidden="true"></div>
+  <div class="bg-shape bg-shape--one" aria-hidden="true"></div>
+  <div class="bg-shape bg-shape--two" aria-hidden="true"></div>
+
+  <!-- ============ SPLASH (first 3s) ============ -->
+  <div class="splash" id="splash" role="presentation">
+    <div class="splash__inner">
+      <img class="splash__logo" src="assets/logo/lifemakers.png" alt="نوادي صناع الحياة" width="320" height="auto" />
+      <p class="splash__title">نوادي صناع الحياة بالجامعات المصرية</p>
+      <p class="splash__line">كريم شعير</p>
+      <p class="splash__line-sub">إدارة البيانات والتحول الرقمي</p>
+      <p class="splash__fest">EZAEES — FESTIVAL 2026</p>
+    </div>
+  </div>
+
+  <header class="site-head">
+    <a class="brand" href="index.html" aria-label="EZAEES — الصفحة الرئيسية">
+      <img class="brand__mark" src="assets/logo/mark.svg" alt="" width="34" height="34" />
+      <span class="brand__word">EZAEES</span>
+      <span class="brand__fest">FESTIVAL ’26</span>
+    </a>
+
+    <nav class="site-nav" aria-label="التنقل الرئيسي">
+      <a href="index.html" aria-current="page">Dashboard</a>
+      <a href="registrations.html">التسجيلات</a>
+      <a href="#activities">العروض والفعاليات</a>
+      <a href="#analytics">التحليلات</a>
+    </nav>
+  </header>
+
+  <main id="main" class="wrap">
+
+    <div class="org-badge reveal">
+      <img class="org-badge__logo" src="assets/logo/lifemakers.png" alt="نوادي صناع الحياة" width="220" height="auto" />
+      <p class="org-badge__title">نوادي صناع الحياة بالجامعات المصرية</p>
+    </div>
+
+    <section class="error-state" id="errorState" hidden>
+      <h2 class="error-state__title">تعذر الاتصال ببيانات التسجيلات</h2>
+      <p class="error-state__body">حاول تحديث الصفحة مرة أخرى.</p>
+      <button class="btn btn--ghost" type="button" id="retryBtn">إعادة المحاولة</button>
+    </section>
+
+    <!-- ============ HERO ============ -->
+    <section class="hero reveal" aria-labelledby="heroTitle">
+      <div class="hero__copy">
+        <p class="hero__kicker">مهرجان إيزيس · نوادي صناع الحياة · الجامعات المصرية</p>
+        <h1 id="heroTitle" class="hero__word">
+          <span class="hero__word-line">EZAEES</span>
+          <span class="hero__word-line hero__word-line--accent">FESTIVAL 2026</span>
+        </h1>
+        <p class="hero__tagline">Registration Intelligence</p>
+        <p class="hero__sub">نوادي صناع الحياة بالجامعات المصرية</p>
+      </div>
+
+      <div class="hero__panel">
+        <div class="hero__stat hero__stat--main">
+          <span class="hero__stat-num" id="heroTotal">—</span>
+          <span class="hero__stat-label">إجمالي التسجيلات</span>
+        </div>
+        <div class="hero__stat">
+          <span class="hero__stat-num hero__stat-num--sm" id="heroUpdated">—</span>
+          <span class="hero__stat-label">آخر تحديث</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FESTIVAL PULSE ============ -->
+    <section class="pulse reveal" id="pulse" aria-labelledby="pulseTitle">
+      <header class="section-head section-head--row">
+        <div>
+          <p class="section-kicker">حركة التسجيل عبر الأيام</p>
+          <h2 class="section-title" id="pulseTitle">Festival Pulse</h2>
+        </div>
+        <div class="pulse__readout">
+          <div class="pulse__nums">
+            <span class="pulse__delta" id="pulseDelta">—</span>
+            <span class="pulse__trend" id="pulseTrend" aria-hidden="true"></span>
+          </div>
+          <span class="pulse__meta" id="pulseMeta">تسجيل في آخر يوم</span>
+        </div>
+      </header>
+
+      <div class="card chart-card chart-card--tall">
+        <div class="chart-wrap" role="img" aria-label="خط اتجاه التسجيلات اليومية">
+          <canvas id="dailyChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ KPI STRIP ============ -->
+    <section class="kpis reveal" aria-label="مؤشرات رئيسية">
+      <div class="kpi">
+        <span class="kpi__num" id="kpiTotal">—</span>
+        <span class="kpi__label">إجمالي التسجيلات</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi__num" id="kpiActivities">—</span>
+        <span class="kpi__label">العروض والفعاليات</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi__num" id="kpiGovernorates">—</span>
+        <span class="kpi__label">المحافظات</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi__num" id="kpiDays">—</span>
+        <span class="kpi__label">أيام فيها تسجيلات</span>
+      </div>
+    </section>
+
+    <!-- ============ ACTIVITY INTELLIGENCE ============ -->
+    <section class="intel reveal" id="activities" aria-labelledby="activitiesTitle">
+      <header class="section-head">
+        <p class="section-kicker">الطلب على العروض</p>
+        <h2 class="section-title" id="activitiesTitle">Activity Intelligence</h2>
+        <p class="section-lead">ترتيب العروض والحفلات حسب عدد التسجيلات، مع تفاصيل كل عرض. اضغط على أي عرض لاستعراض تسجيلاته مباشرة.</p>
+      </header>
+
+      <div class="intel__grid">
+        <ol class="activity-list" id="activityList" aria-label="قائمة العروض مرتبة">
+          <li class="activity-list__skeleton" aria-hidden="true"><span></span><span></span><span></span></li>
+          <li class="activity-list__skeleton" aria-hidden="true"><span></span><span></span><span></span></li>
+          <li class="activity-list__skeleton" aria-hidden="true"><span></span><span></span><span></span></li>
+        </ol>
+
+        <aside class="card chart-card" aria-label="رسم بياني: التسجيلات حسب العرض">
+          <div class="chart-wrap">
+            <canvas id="activityChart"></canvas>
+          </div>
+          <p class="card__note">التسجيلات لكل عرض · كنسبة من الإجمالي</p>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============ GEOGRAPHIC ============ -->
+    <section class="geo reveal" id="geo" aria-labelledby="geoTitle">
+      <header class="section-head">
+        <p class="section-kicker">التوزيع الجغرافي</p>
+        <h2 class="section-title" id="geoTitle">Geographic Distribution</h2>
+        <p class="section-lead">أين يتوزع المشاركون؟ المحافظات مرتبة حسب حجم التسجيلات.</p>
+      </header>
+
+      <div class="geo__grid">
+        <ol class="rank-list" id="govList" aria-label="ترتيب المحافظات">
+          <li class="rank-list__skeleton" aria-hidden="true"><span></span><span></span></li>
+          <li class="rank-list__skeleton" aria-hidden="true"><span></span><span></span></li>
+        </ol>
+
+        <aside class="card chart-card" aria-label="رسم بياني: التسجيلات حسب المحافظة">
+          <div class="chart-wrap">
+            <canvas id="govChart"></canvas>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============ REGISTRATION TREND ============ -->
+    <section class="trend reveal" id="trend" aria-labelledby="trendTitle">
+      <header class="section-head">
+        <p class="section-kicker">إيقاع التراكم</p>
+        <h2 class="section-title" id="trendTitle">Registration Trend</h2>
+        <p class="section-lead">متوسط الحصيلة اليومية وموازنة آخر أيام التسجيل مقابل بدايتها.</p>
+      </header>
+
+      <div class="trend__grid">
+        <div class="trend__stat">
+          <span class="trend__num" id="trendAverage">—</span>
+          <span class="trend__meta">متوسط التسجيلات اليومي</span>
+        </div>
+        <div class="trend__stat">
+          <span class="trend__num" id="trendPeak">—</span>
+          <span class="trend__meta">أعلى يوم تسجيل</span>
+        </div>
+        <div class="trend__bars" id="trendBars" aria-label="التسجيلات اليومية">
+          <span class="trend-bars__skeleton"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PARTICIPANT PROFILE ============ -->
+    <section class="profile reveal" id="analytics" aria-labelledby="profileTitle">
+      <header class="section-head">
+        <p class="section-kicker">لمحة عن المشاركين</p>
+        <h2 class="section-title" id="profileTitle">Participant Profile</h2>
+        <p class="section-lead">توزيع مستوى اللغة الإنجليزية وأنواع الفعاليات ضمن التسجيلات.</p>
+      </header>
+
+      <div class="profile__grid">
+        <div class="card chart-card">
+          <h3 class="card__title">مستوى اللغة الإنجليزية</h3>
+          <div class="chart-wrap chart-wrap--donut" role="img" aria-label="مستوى اللغة الإنجليزية">
+            <canvas id="englishChart"></canvas>
+          </div>
+        </div>
+        <div class="card chart-card">
+          <h3 class="card__title">نوع الفعالية</h3>
+          <div class="chart-wrap chart-wrap--donut" role="img" aria-label="أنواع الفعاليات">
+            <canvas id="eventTypeChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="site-foot">
+      <div>
+        <p class="site-foot__word">EZAEES <span>2026</span></p>
+        <p>Registration Intelligence — نوادي صناع الحياة بالجامعات المصرية</p>
+      </div>
+      <p class="site-foot__updated">آخر تحديث <span id="footUpdated">—</span></p>
+    </footer>
+
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/activity-parser.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

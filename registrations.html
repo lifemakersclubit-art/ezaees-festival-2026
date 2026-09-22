@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="استعراض تسجيلات مهرجان Ezaees 2026 — نوادي صناع الحياة بالجامعات المصرية" />
+  <title>التسجيلات — EZAEES Festival 2026</title>
+  <meta name="theme-color" content="#014976" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/logo/mark.svg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;700;800;900&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/dashboard.css" />
+  <link rel="stylesheet" href="css/responsive.css" />
+</head>
+<body>
+
+  <div class="grain" aria-hidden="true"></div>
+  <div class="bg-shape bg-shape--one" aria-hidden="true"></div>
+  <div class="bg-shape bg-shape--two" aria-hidden="true"></div>
+
+  <!-- ============ SPLASH (first 3s) ============ -->
+  <div class="splash" id="splash" role="presentation">
+    <div class="splash__inner">
+      <img class="splash__logo" src="assets/logo/lifemakers.png" alt="نوادي صناع الحياة" width="320" height="auto" />
+      <p class="splash__title">نوادي صناع الحياة بالجامعات المصرية</p>
+      <p class="splash__line">كريم شعير</p>
+      <p class="splash__line-sub">إدارة البيانات والتحول الرقمي</p>
+      <p class="splash__fest">EZAEES — FESTIVAL 2026</p>
+    </div>
+  </div>
+
+  <header class="site-head">
+    <a class="brand" href="index.html" aria-label="EZAEES — الصفحة الرئيسية">
+      <img class="brand__mark" src="assets/logo/mark.svg" alt="" width="34" height="34" />
+      <span class="brand__word">EZAEES</span>
+      <span class="brand__fest">FESTIVAL ’26</span>
+    </a>
+
+    <nav class="site-nav" aria-label="التنقل الرئيسي">
+      <a href="index.html">Dashboard</a>
+      <a href="registrations.html" aria-current="page">التسجيلات</a>
+      <a href="index.html#activities">العروض والفعاليات</a>
+      <a href="index.html#analytics">التحليلات</a>
+    </nav>
+  </header>
+
+  <main id="main" class="wrap wrap--narrow">
+
+    <div class="org-badge reveal">
+      <img class="org-badge__logo" src="assets/logo/lifemakers.png" alt="نوادي صناع الحياة" width="220" height="auto" />
+      <p class="org-badge__title">نوادي صناع الحياة بالجامعات المصرية</p>
+    </div>
+
+    <section class="error-state" id="errorState" hidden>
+      <h2 class="error-state__title">تعذر الاتصال ببيانات التسجيلات</h2>
+      <p class="error-state__body">حاول تحديث الصفحة مرة أخرى.</p>
+      <button class="btn btn--ghost" type="button" id="retryBtn">إعادة المحاولة</button>
+    </section>
+
+    <!-- Page header -->
+    <section class="page-head reveal" aria-labelledby="pageTitle">
+      <p class="section-kicker">سجل التسجيل</p>
+      <h1 class="page-title" id="pageTitle">التسجيلات</h1>
+      <p class="section-lead" id="resultSummary">جاري تحميل البيانات…</p>
+    </section>
+
+    <!-- Filters -->
+    <section class="filters reveal" aria-label="فلاتر البحث">
+      <div class="filters__search">
+        <label class="sr-only" for="searchInput">البحث في التسجيلات</label>
+        <input type="search" id="searchInput" class="input input--search"
+               placeholder="ابحث بالاسم، الهاتف، الإيميل، المحافظة، العرض…"
+               autocomplete="off" />
+      </div>
+
+      <div class="filters__grid">
+        <div class="field">
+          <label class="field__label" for="fGov">المحافظة</label>
+          <select class="input" id="fGov">
+            <option value="">الكل</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="fType">نوع الفعالية</label>
+          <select class="input" id="fType">
+            <option value="">الكل</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="fLevel">مستوى اللغة</label>
+          <select class="input" id="fLevel">
+            <option value="">الكل</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="fDay">اليوم</label>
+          <select class="input" id="fDay">
+            <option value="">الكل</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="fActivity">العرض</label>
+          <select class="input" id="fActivity">
+            <option value="">الكل</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn btn--ghost" type="button" id="clearFilters">إزالة الفلاتر</button>
+    </section>
+
+    <!-- Table -->
+    <section class="table-card reveal" aria-label="جدول التسجيلات">
+      <div class="table-scroll" tabindex="0" aria-label="جدول التسجيلات — مرّر أفقيًا لعرض كل الأعمدة">
+        <table class="reg-table" id="regTable">
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">الاسم</th>
+              <th scope="col">المحافظة</th>
+              <th scope="col">الهاتف</th>
+              <th scope="col">البريد الإلكتروني</th>
+              <th scope="col" class="col-level">مستوى اللغة</th>
+              <th scope="col">نوع الفعالية</th>
+              <th scope="col">اليوم</th>
+              <th scope="col">العرض</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td colspan="9" class="table-empty">جاري التحميل…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pagination" id="pagination" hidden>
+        <button class="btn btn--ghost" type="button" id="prevPage">السابق</button>
+        <span class="pagination__info" id="pageInfo">—</span>
+        <button class="btn btn--ghost" type="button" id="nextPage">التالي</button>
+      </div>
+    </section>
+
+    <footer class="site-foot">
+      <div>
+        <p class="site-foot__word">EZAEES <span>2026</span></p>
+        <p>Registration Intelligence — نوادي صناع الحياة بالجامعات المصرية</p>
+      </div>
+      <p class="site-foot__updated">آخر تحديث <span id="footUpdated">—</span></p>
+    </footer>
+
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/activity-parser.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/registrations.js"></script>
+</body>
+</html>
