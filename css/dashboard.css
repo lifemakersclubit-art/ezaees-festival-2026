@@ -90,6 +90,48 @@
   font-size: clamp(0.9rem, 2.2vw, 1.05rem);
 }
 
+/* ---------- About (Board summary) ---------- */
+.about {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: clamp(16px, 2.5vw, 28px);
+  margin-bottom: clamp(20px, 3vw, 32px);
+}
+
+.about .section-title {
+  font-size: clamp(0.85rem, 1.8vw, 1rem);
+  color: var(--blue);
+  margin-bottom: 14px;
+}
+
+.about__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.about__list li {
+  position: relative;
+  padding-right: 18px;
+  font-size: clamp(0.82rem, 1.5vw, 0.92rem);
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.about__list li::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--orange);
+}
+
 /* ---------- Page-load reveal ---------- */
 .reveal {
   opacity: 0;
