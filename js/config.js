@@ -15,11 +15,19 @@ var API_CONFIG = {
 
   DEFAULT_PAGE_SIZE: 50,
 
-  // Timeout BEFORE falling back to JSONP (ms). Keep it small.
-  FETCH_TIMEOUT_MS: 12000,
+  // Timeout BEFORE falling back to JSONP (ms).
+  // A cold Apps Script execution can take 20-25s, so this must stay well
+  // above that. 12s used to abort healthy cold starts and show the
+  // "unable to connect" state on a perfectly working backend.
+  FETCH_TIMEOUT_MS: 30000,
 
-  // JSONP fallback timeout (ms).
-  JSONP_TIMEOUT_MS: 25000,
+  // JSONP fallback timeout (ms). Generous because it usually pays for a
+  // second, cold execution of its own.
+  JSONP_TIMEOUT_MS: 45000,
+
+  // One automatic retry on network/timeout failure. The retry almost
+  // always hits a warm VM and succeeds in a couple of seconds.
+  MAX_RETRIES: 1,
 
   // Debug only: set to true to exercise the clearly-labelled demo path
   // instead of hitting the API. NEVER ship with this enabled.

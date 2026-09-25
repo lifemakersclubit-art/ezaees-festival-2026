@@ -90,16 +90,28 @@ var API = (function () {
   }
 
   /**
-   * Public: GET an action. Tries fetch, falls back to JSONP.
+   * Public: GET an action. Tries fetch, falls back to JSONP, and retries
+   * once on failure — a cold Apps Script VM routinely needs 20s+, so a
+   * single cold failure must not surface as a broken dashboard.
    * Returns a Promise resolving to the parsed payload object.
    */
   function get(action, params) {
     if (API_CONFIG.DEMO_MODE) {
       return importDemoData(action, params);
     }
-    return fetchJSON(action, params).catch(function () {
-      return jsonp(action, params);
-    });
+
+    var retries = typeof API_CONFIG.MAX_RETRIES === 'number' ? API_CONFIG.MAX_RETRIES : 1;
+
+    function attempt(remaining) {
+      return fetchJSON(action, params)
+        .catch(function () { return jsonp(action, params); })
+        .catch(function (err) {
+          if (remaining <= 0) throw err;
+          return attempt(remaining - 1);
+        });
+    }
+
+    return attempt(retries);
   }
 
   /**

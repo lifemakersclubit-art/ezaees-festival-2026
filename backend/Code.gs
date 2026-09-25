@@ -28,6 +28,7 @@ function doPost(e) {
 }
 
 function route_(params, e) {
+  resetRequestState_();
   try {
     var action = String(params.action || ACTION.DASHBOARD).toLowerCase();
 

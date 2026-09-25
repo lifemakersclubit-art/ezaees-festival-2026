@@ -712,6 +712,34 @@ function aggregateMode_(rows, activityName, column) {
 function parseActivity_(text) {
   if (!text) return null;
 
+  // The same activity block repeats across many rows, and parsing it is
+  // regex-heavy. Memoising per request turns O(rows) parses into
+  // O(distinct activities). Reset on every request so nothing leaks
+  // between them.
+  var key = String(text);
+  var memo = activityMemo_();
+  if (Object.prototype.hasOwnProperty.call(memo, key)) return memo[key];
+
+  var parsed = parseActivityUncached_(key);
+  memo[key] = parsed;
+  return parsed;
+}
+
+var ACTIVITY_MEMO_ = null;
+
+function activityMemo_() {
+  if (!ACTIVITY_MEMO_) ACTIVITY_MEMO_ = {};
+  return ACTIVITY_MEMO_;
+}
+
+/** Called once per HTTP request. */
+function resetRequestState_() {
+  ACTIVITY_MEMO_ = null;
+}
+
+function parseActivityUncached_(text) {
+  if (!text) return null;
+
   var lines = String(text)
     .split(/\r?\n/)
     .map(trimSafe_)
@@ -953,6 +981,7 @@ function doPost(e) {
 }
 
 function route_(params, e) {
+  resetRequestState_();
   try {
     var action = String(params.action || ACTION.DASHBOARD).toLowerCase();
 
