@@ -36,6 +36,21 @@ var FRESH_MS = 60000;
 var DATASET_KEY = 'ezaees_dash_rows_v1';
 var DATASET_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * Transport options for the row projection only.
+ *
+ * A cold Apps Script execution of /rows was measured at 7.4s, 28.9s and
+ * 30.6s, so it gets a long single-transport budget. The JSONP hop is
+ * disabled on purpose: it would pay for a second cold execution, and the
+ * retry a third, so a bad cold start used to turn into a 150s wait and
+ * then a permanent fall back to the slow per-filter path.
+ */
+var DATASET_FETCH_OPTS = {
+  timeoutMs: API_CONFIG.DATASET_FETCH_TIMEOUT_MS,
+  allowJsonp: false,
+  retries: 1
+};
+
     var els = {
       error: Util.qs('#errorState'),
       retry: Util.qs('#retryBtn'),
@@ -91,7 +106,7 @@ var DATASET_TTL_MS = 10 * 60 * 1000;
     // worth prefetching — the server aggregates it locally from there on.
     var bootPrefetch = hasActiveFilters()
       ? null
-      : API.prefetch('rows');
+      : API.prefetch('rows', null, DATASET_FETCH_OPTS);
 
     function readFiltersFromUrl() {
       var params = new URLSearchParams(window.location.search);
@@ -184,7 +199,8 @@ var DATASET_TTL_MS = 10 * 60 * 1000;
         .join(' · ');
 
       els.filterStatus.classList.add('is-active');
-      els.filterStatus.textContent = 'عرض ' + Util.fmtNumber(shown) + ' من ' + Util.fmtNumber(all) + ' تسجيل · ' + labels;
+      els.filterStatus.textContent = 'عرض ' + Util.fmtNumber(shown) + ' من ' + Util.fmtNumber(all) + ' تسجيل · ' + labels
+        + (state.dataset ? '' : ' · تحميل كل فلتر من السيرفر');
     }
 
     function staggerReveal() {
@@ -289,21 +305,53 @@ var DATASET_TTL_MS = 10 * 60 * 1000;
         return state.datasetPromise;
       }
 
-      var pending = prefetched || API.get('rows');
+      var pending = prefetched || API.get('rows', null, DATASET_FETCH_OPTS);
       state.datasetPromise = pending.then(function (payload) {
         if (API.isError(payload)) throw new Error(payload.error || 'API error');
         if (!payload || !payload.rows || !payload.rows.length) {
           throw new Error('empty row projection');
         }
         state.dataset = payload;
+        datasetRetries = 0;
         writeDatasetCache(payload);
         return payload;
       }).catch(function (err) {
         state.datasetPromise = null; // let a later filter retry the fetch
+        scheduleDatasetRetry();
         throw err;
       });
 
       return state.datasetPromise;
+    }
+
+    /**
+     * Self-healing: one failed cold start must not pin the whole session to
+     * the slow per-filter path. Without this, a single bad response left
+     * state.dataset null for good, so every later filter click paid a fresh
+     * 2-25s round trip and looked broken.
+     *
+     * Retries are capped and backed off, and the retry is silent: it only
+     * upgrades the board to local filtering, it never clears the view the
+     * user is currently looking at.
+     */
+    var datasetRetries = 0;
+    var datasetRetryTimer = null;
+
+    function scheduleDatasetRetry() {
+      if (datasetRetryTimer || state.dataset) return;
+      if (datasetRetries >= 3) return;
+
+      datasetRetries++;
+      var wait = Math.min(5000 * datasetRetries, 20000);
+      datasetRetryTimer = setTimeout(function () {
+        datasetRetryTimer = null;
+        if (state.dataset) return;
+
+        loadDataset().then(function () {
+          applyLocalView(false);
+          renderFilterStatus(state.payload);
+        }).catch(function () {});
+      }, wait);
     }
 
     /**

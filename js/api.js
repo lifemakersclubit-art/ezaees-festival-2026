@@ -32,13 +32,14 @@ var API = (function () {
     return url + (url.indexOf('?') === -1 ? '?' : '&') + qs.join('&');
   }
 
-  function fetchJSON(action, params) {
+  function fetchJSON(action, params, timeoutMs) {
     var url = buildUrl(action, params);
     var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timer = null;
+    var limit = timeoutMs || API_CONFIG.FETCH_TIMEOUT_MS;
 
     if (controller) {
-      timer = setTimeout(function () { controller.abort(); }, API_CONFIG.FETCH_TIMEOUT_MS);
+      timer = setTimeout(function () { controller.abort(); }, limit);
     }
 
     return fetch(url, { signal: controller ? controller.signal : undefined, cache: 'no-store' })
@@ -93,22 +94,37 @@ var API = (function () {
    * Public: GET an action. Tries fetch, falls back to JSONP, and retries
    * once on failure — a cold Apps Script VM routinely needs 20s+, so a
    * single cold failure must not surface as a broken dashboard.
+   *
+   * opts:
+   *   timeoutMs  - override the fetch budget for this call
+   *   allowJsonp - false keeps the call on a single transport
+   *   retries    - override the automatic retry count
+   *
+   * The row projection passes allowJsonp:false and a long budget. A JSONP
+   * fallback means a SECOND cold Apps Script execution (a third once the
+   * retry is counted), so for the one call that unlocks all local
+   * filtering it is far better to wait on a single generous fetch than to
+   * pay for three slow ones and then give up.
    * Returns a Promise resolving to the parsed payload object.
    */
-  function get(action, params) {
+  function get(action, params, opts) {
+    opts = opts || {};
+
     if (API_CONFIG.DEMO_MODE) {
       return importDemoData(action, params);
     }
 
-    var retries = typeof API_CONFIG.MAX_RETRIES === 'number' ? API_CONFIG.MAX_RETRIES : 1;
+    var retries = typeof opts.retries === 'number' ? opts.retries
+      : (typeof API_CONFIG.MAX_RETRIES === 'number' ? API_CONFIG.MAX_RETRIES : 1);
+    var allowJsonp = opts.allowJsonp !== false;
 
     function attempt(remaining) {
-      return fetchJSON(action, params)
-        .catch(function () { return jsonp(action, params); })
-        .catch(function (err) {
-          if (remaining <= 0) throw err;
-          return attempt(remaining - 1);
-        });
+      var first = fetchJSON(action, params, opts.timeoutMs);
+      var p = allowJsonp ? first.catch(function () { return jsonp(action, params); }) : first;
+      return p.catch(function (err) {
+        if (remaining <= 0) throw err;
+        return attempt(remaining - 1);
+      });
     }
 
     return attempt(retries);
@@ -119,8 +135,8 @@ var API = (function () {
    * ~20s cold start overlaps page rendering instead of starting after it.
    * The returned promise is the one controllers should await.
    */
-  function prefetch(action, params) {
-    var p = get(action, params);
+  function prefetch(action, params, opts) {
+    var p = get(action, params, opts);
     window.__EZAEES_PREFETCH__ = p;
     return p;
   }

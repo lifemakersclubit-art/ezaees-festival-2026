@@ -16,10 +16,18 @@ var API_CONFIG = {
   DEFAULT_PAGE_SIZE: 50,
 
   // Timeout BEFORE falling back to JSONP (ms).
-  // A cold Apps Script execution can take 20-25s, so this must stay well
-  // above that. 12s used to abort healthy cold starts and show the
-  // "unable to connect" state on a perfectly working backend.
-  FETCH_TIMEOUT_MS: 30000,
+  // A cold Apps Script execution was MEASURED at 7.4s, 28.9s and 30.6s on
+  // the deployed /rows endpoint. The old 30s ceiling sat exactly on that
+  // last measurement, so a large share of cold starts aborted themselves
+  // and dropped the board into the slow per-filter path for the whole
+  // session. 60s clears the observed worst case with headroom.
+  FETCH_TIMEOUT_MS: 60000,
+
+  // The row projection is the one call that must never be given up on: it
+  // is fetched once and then answers every filter locally, forever. It gets
+  // its own much longer budget, and it deliberately skips the JSONP hop
+  // (which would pay for a SECOND cold execution) - see api.js.
+  DATASET_FETCH_TIMEOUT_MS: 120000,
 
   // JSONP fallback timeout (ms). Generous because it usually pays for a
   // second, cold execution of its own.
