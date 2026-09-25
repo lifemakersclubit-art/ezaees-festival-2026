@@ -128,29 +128,9 @@ function importDemoData(action, params) {
   }
 
   var payload = { success: true, demo: true, generatedAt: new Date().toISOString() };
-  var summary = demo.summary;
 
-  if (action === 'dashboard') {
-    payload.summary = summary;
-    payload.activities = demo.activities;
-    payload.governorates = demo.governorates;
-    payload.daily = demo.daily;
-    payload.englishLevels = demo.englishLevels;
-    payload.eventTypes = demo.eventTypes;
-    return Promise.resolve(payload);
-  }
-
-  if (action === 'activities') {
-    payload.activities = demo.activities;
-    return Promise.resolve(payload);
-  }
-  if (action === 'governorates') {
-    payload.governorates = demo.governorates;
-    return Promise.resolve(payload);
-  }
-  if (action === 'daily') {
-    payload.daily = demo.daily;
-    return Promise.resolve(payload);
+  if (action === 'dashboard' || action === 'activities' || action === 'governorates' || action === 'daily') {
+    return Promise.resolve(buildDemoDashboard_(demo, params));
   }
 
   if (action === 'registrations') {
@@ -181,4 +161,149 @@ function importDemoData(action, params) {
   }
 
   return Promise.reject(new Error('Unknown demo action: ' + action));
+}
+
+/* ---------------------------------------------------------- *
+ * Demo dashboard with the same filter semantics as the backend
+ * ---------------------------------------------------------- */
+
+function demoNormalize_(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/[\u064B-\u0652]/g, '')
+    .replace(/[أإآ]/g, '\u0627')
+    .replace(/\u0629/g, '\u0647')
+    .replace(/\u0649/g, '\u064A')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function demoGroup_(rows, pick) {
+  var map = {};
+  rows.forEach(function (r) {
+    var v = pick(r);
+    if (!v) return;
+    map[v] = (map[v] || 0) + 1;
+  });
+
+  var total = rows.length || 1;
+  return Object.keys(map).map(function (name) {
+    return {
+      name: name,
+      count: map[name],
+      percentage: Math.round((map[name] / total) * 1000) / 10
+    };
+  }).sort(function (a, b) { return b.count - a.count; });
+}
+
+function buildDemoDashboard_(demo, params) {
+  params = params || {};
+  var allRows = demo.rows || [];
+
+  var filters = {
+    governorate: demoNormalize_(params.governorate),
+    activity: demoNormalize_(params.activity),
+    day: demoNormalize_(params.day),
+    eventType: demoNormalize_(params.eventType),
+    englishLevel: demoNormalize_(params.englishLevel)
+  };
+  var active = !!(filters.governorate || filters.activity || filters.day ||
+    filters.eventType || filters.englishLevel);
+
+  var rows = allRows.filter(function (r) {
+    if (filters.governorate && demoNormalize_(r.governorate) !== filters.governorate) return false;
+    if (filters.eventType && demoNormalize_(r.eventType) !== filters.eventType) return false;
+    if (filters.englishLevel && demoNormalize_(r.englishLevel) !== filters.englishLevel) return false;
+    if (filters.day && demoNormalize_(r.day) !== filters.day) return false;
+    if (filters.activity && !(r.activity && demoNormalize_(r.activity.name) === filters.activity)) return false;
+    return true;
+  });
+
+  var total = rows.length;
+
+  var dayMap = {};
+  rows.forEach(function (r) {
+    var d = String(r.submissionTime || '').slice(0, 10);
+    if (!d) return;
+    dayMap[d] = (dayMap[d] || 0) + 1;
+  });
+  var daily = Object.keys(dayMap).sort().map(function (date) {
+    return { date: date, count: dayMap[date] };
+  });
+
+  var activityGroups = demoGroup_(rows, function (r) {
+    return r.activity && r.activity.name;
+  });
+  activityGroups.forEach(function (g) {
+    var sample = rows.filter(function (r) { return r.activity && r.activity.name === g.name; })[0];
+    if (!sample) return;
+    g.date = sample.day;
+    g.time = sample.activity.time;
+    g.location = sample.activity.location;
+    g.language = sample.activity.language;
+    g.duration = sample.activity.duration;
+    g.org = sample.activity.org;
+  });
+
+  var governorates = demoGroup_(rows, function (r) { return r.governorate; });
+  var englishLevels = demoGroup_(rows, function (r) { return r.englishLevel; });
+  var eventTypes = demoGroup_(rows, function (r) { return r.eventType; });
+
+  function distinctAll(pick) {
+    var seen = {};
+    var out = [];
+    allRows.forEach(function (r) {
+      var v = pick(r);
+      if (!v) return;
+      var n = demoNormalize_(v);
+      if (seen[n]) return;
+      seen[n] = true;
+      out.push(v);
+    });
+    return out.sort(function (a, b) { return a.localeCompare(b, 'ar'); });
+  }
+
+  var last = null;
+  rows.forEach(function (r) {
+    var t = String(r.submissionTime || '');
+    if (!t) return;
+    if (!last || t > last) last = t;
+  });
+
+  var byDate = {};
+  rows.forEach(function (r) {
+    var d = String(r.submissionTime || '').slice(0, 10);
+    if (d) byDate[d] = true;
+  });
+
+  var payload = {
+    success: true,
+    demo: true,
+    generatedAt: new Date().toISOString(),
+    summary: {
+      totalRegistrations: total,
+      totalUnfiltered: allRows.length,
+      isFiltered: active,
+      uniqueActivities: activityGroups.length,
+      governorates: governorates.length,
+      activeDays: Object.keys(byDate).length,
+      lastSubmissionAt: last || (demo.summary && demo.summary.lastSubmissionAt)
+    },
+    filters: filters,
+    options: {
+      governorates: distinctAll(function (r) { return r.governorate; }),
+      eventTypes: distinctAll(function (r) { return r.eventType; }),
+      englishLevels: distinctAll(function (r) { return r.englishLevel; }),
+      days: distinctAll(function (r) { return r.day; }),
+      activities: distinctAll(function (r) { return r.activity && r.activity.name; })
+    },
+    activities: activityGroups,
+    governorates: governorates,
+    daily: daily,
+    englishLevels: englishLevels,
+    eventTypes: eventTypes
+  };
+
+  return payload;
 }

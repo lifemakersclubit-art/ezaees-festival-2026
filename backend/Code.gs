@@ -33,10 +33,10 @@ function route_(params, e) {
 
     switch (action) {
       case ACTION.DASHBOARD:
-        return response_(getDashboardPayload_(), params.callback);
+        return response_(getDashboardPayload_(params), params.callback);
 
       case ACTION.ACTIVITIES: {
-        var payload = getDashboardPayload_();
+        var payload = getDashboardPayload_(params);
         return response_({
           success: true,
           demo: payload.demo,
@@ -46,7 +46,7 @@ function route_(params, e) {
       }
 
       case ACTION.GOVERNORATES: {
-        var gPayload = getDashboardPayload_();
+        var gPayload = getDashboardPayload_(params);
         return response_({
           success: true,
           demo: gPayload.demo,
@@ -56,7 +56,7 @@ function route_(params, e) {
       }
 
       case ACTION.DAILY: {
-        var dPayload = getDashboardPayload_();
+        var dPayload = getDashboardPayload_(params);
         return response_({
           success: true,
           demo: dPayload.demo,

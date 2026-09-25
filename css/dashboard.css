@@ -90,6 +90,120 @@
   font-size: clamp(0.9rem, 2.2vw, 1.05rem);
 }
 
+/* ---------- Dashboard filters ---------- */
+.dfilter {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: clamp(16px, 2.5vw, 26px);
+  margin-bottom: clamp(20px, 3vw, 32px);
+}
+
+.dfilter__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.dfilter__head .section-title {
+  font-size: clamp(0.85rem, 1.8vw, 1rem);
+  color: var(--blue);
+  margin: 0;
+}
+
+.dfilter__hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.dfilter__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.dfilter__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dfilter__field label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.dfilter__select {
+  width: 100%;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dfilter__select:hover:not(:disabled) {
+  border-color: var(--blue);
+}
+
+.dfilter__select:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(11, 92, 178, 0.15);
+}
+
+.dfilter__select:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.dfilter__actions {
+  display: flex;
+}
+
+.dfilter__reset {
+  width: 100%;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--blue);
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dfilter__reset:hover {
+  border-color: var(--blue);
+  background: rgba(11, 92, 178, 0.06);
+}
+
+.dfilter__status {
+  margin: 12px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  min-height: 1.2em;
+}
+
+.dfilter__status.is-active {
+  color: var(--blue);
+  font-weight: 700;
+}
+
 /* ---------- About (Board summary) ---------- */
 .about {
   background: var(--card);

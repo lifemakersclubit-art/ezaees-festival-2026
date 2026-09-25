@@ -79,3 +79,9 @@ var EXPOSED_KEYS = [
 ];
 
 var CACHE_KEY_DASHBOARD = 'ezaees_dashboard_' + CONFIG.API_VERSION;
+
+/**
+ * Filtered dashboard views are cached under their own key so that
+ * applying a filter never overwrites the canonical unfiltered payload.
+ */
+var CACHE_KEY_DASHBOARD_FILTERED = 'ezaees_dash_f_' + CONFIG.API_VERSION;

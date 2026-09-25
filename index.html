@@ -103,6 +103,57 @@
       </div>
     </section>
 
+    <!-- ============ FILTERS ============ -->
+    <section class="dfilter reveal" aria-labelledby="dfilterTitle">
+      <div class="dfilter__head">
+        <h2 class="section-title" id="dfilterTitle">تصفية البيانات</h2>
+        <p class="dfilter__hint">اختر ما تريد عرضه فقط</p>
+      </div>
+
+      <div class="dfilter__grid">
+        <div class="dfilter__field">
+          <label for="dFilterGov">المحافظة</label>
+          <select id="dFilterGov" class="dfilter__select">
+            <option value="">كل المحافظات</option>
+          </select>
+        </div>
+
+        <div class="dfilter__field">
+          <label for="dFilterActivity">العرض</label>
+          <select id="dFilterActivity" class="dfilter__select">
+            <option value="">كل العروض</option>
+          </select>
+        </div>
+
+        <div class="dfilter__field">
+          <label for="dFilterDay">اليوم</label>
+          <select id="dFilterDay" class="dfilter__select">
+            <option value="">كل الأيام</option>
+          </select>
+        </div>
+
+        <div class="dfilter__field">
+          <label for="dFilterEventType">نوع الفعالية</label>
+          <select id="dFilterEventType" class="dfilter__select">
+            <option value="">كل الأنواع</option>
+          </select>
+        </div>
+
+        <div class="dfilter__field">
+          <label for="dFilterLevel">مستوى اللغة</label>
+          <select id="dFilterLevel" class="dfilter__select">
+            <option value="">كل المستويات</option>
+          </select>
+        </div>
+
+        <div class="dfilter__actions">
+          <button type="button" id="dFilterReset" class="dfilter__reset">إلغاء التصفية</button>
+        </div>
+      </div>
+
+      <p class="dfilter__status" id="dFilterStatus" role="status" aria-live="polite"></p>
+    </section>
+
     <!-- ============ ABOUT (Board summary) ============ -->
     <section class="about reveal">
       <h2 class="section-title">ماذا تقدم هذه اللوحة؟</h2>

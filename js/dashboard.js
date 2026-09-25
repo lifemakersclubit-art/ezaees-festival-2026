@@ -17,7 +17,13 @@
   ready(function () {
     if (API_CONFIG.DEMO_MODE) initDemoData();
 
-    var state = { payload: null };
+    var FILTER_LABELS = {
+      governorate: 'كل المحافظات',
+      activity: 'كل العروض',
+      day: 'كل الأيام',
+      eventType: 'كل الأنواع',
+      englishLevel: 'كل المستويات'
+    };
 
     var els = {
       error: Util.qs('#errorState'),
@@ -35,8 +41,119 @@
       trendAverage: Util.qs('#trendAverage'),
       trendPeak: Util.qs('#trendPeak'),
       trendBars: Util.qs('#trendBars'),
-      footUpdated: Util.qs('#footUpdated')
+      footUpdated: Util.qs('#footUpdated'),
+
+      filterGov: Util.qs('#dFilterGov'),
+      filterActivity: Util.qs('#dFilterActivity'),
+      filterDay: Util.qs('#dFilterDay'),
+      filterEventType: Util.qs('#dFilterEventType'),
+      filterLevel: Util.qs('#dFilterLevel'),
+      filterReset: Util.qs('#dFilterReset'),
+      filterStatus: Util.qs('#dFilterStatus')
     };
+
+    // Filter field -> (select element, API parameter name, dropdown options key)
+    var FILTER_FIELDS = [
+      { el: els.filterGov, key: 'governorate', options: 'governorates' },
+      { el: els.filterActivity, key: 'activity', options: 'activities' },
+      { el: els.filterDay, key: 'day', options: 'days' },
+      { el: els.filterEventType, key: 'eventType', options: 'eventTypes' },
+      { el: els.filterLevel, key: 'englishLevel', options: 'englishLevels' }
+    ];
+
+    var state = { payload: null, filters: readFiltersFromUrl(), optionsReady: false };
+
+    function readFiltersFromUrl() {
+      var params = new URLSearchParams(window.location.search);
+      var out = {};
+      FILTER_FIELDS.forEach(function (f) {
+        out[f.key] = params.get(f.key) || '';
+      });
+      return out;
+    }
+
+    function syncUrl() {
+      var params = new URLSearchParams();
+      FILTER_FIELDS.forEach(function (f) {
+        var v = state.filters[f.key];
+        if (v) params.set(f.key, v);
+      });
+      var qs = params.toString();
+      var url = window.location.pathname + (qs ? '?' + qs : '');
+      window.history.replaceState(null, '', url);
+    }
+
+    function hasActiveFilters() {
+      return FILTER_FIELDS.some(function (f) { return !!state.filters[f.key]; });
+    }
+
+    /**
+     * Dropdown options are built ONCE from the unfiltered `options` payload
+     * the server sends, so the lists stay complete and the user never loses
+     * focus or scroll position while re-filtering.
+     *
+     * Returns true when a filter from the URL did not exist in the dataset
+     * and had to be dropped (so the caller can re-fetch cleanly).
+     */
+    function ensureFilterOptions(payload) {
+      if (state.optionsReady) return false;
+
+      var options = (payload && payload.options) || {};
+      if (!Object.keys(options).length) return false;
+
+      var changed = false;
+
+      FILTER_FIELDS.forEach(function (f) {
+        if (!f.el) return;
+        var values = options[f.options] || [];
+
+        f.el.innerHTML = '';
+        f.el.appendChild(buildOption(f.key, ''));
+        values.forEach(function (v) {
+          f.el.appendChild(buildOption(f.key, v));
+        });
+
+        // Sanitise a hand-edited URL against what actually exists.
+        var current = state.filters[f.key];
+        if (current && values.indexOf(current) === -1) {
+          state.filters[f.key] = '';
+          changed = true;
+        }
+        f.el.value = state.filters[f.key] || '';
+      });
+
+      state.optionsReady = true;
+      if (changed) syncUrl();
+      return changed;
+    }
+
+    function buildOption(key, value) {
+      var opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = value || FILTER_LABELS[key];
+      return opt;
+    }
+
+    function renderFilterStatus(payload) {
+      if (!els.filterStatus) return;
+
+      if (!hasActiveFilters()) {
+        els.filterStatus.textContent = '';
+        els.filterStatus.classList.remove('is-active');
+        return;
+      }
+
+      var summary = (payload && payload.summary) || {};
+      var shown = summary.totalRegistrations || 0;
+      var all = summary.totalUnfiltered || shown;
+      var labels = FILTER_FIELDS
+        .filter(function (f) { return !!state.filters[f.key]; })
+        .map(function (f) { return state.filters[f.key]; })
+        .join(' · ');
+
+      els.filterStatus.classList.add('is-active');
+      els.filterStatus.textContent = 'عرض ' + Util.fmtNumber(shown) + ' من ' + Util.fmtNumber(all) + ' تسجيل · ' + labels;
+    }
 
     function staggerReveal() {
       Util.qsa('.reveal').forEach(function (el, i) {
@@ -57,20 +174,31 @@
     function load() {
       hideError();
       document.body.classList.remove('ready');
+      Util.qsa('.dfilter__select').forEach(function (s) { s.disabled = true; });
 
-      API.get('dashboard').then(function (payload) {
+      API.get('dashboard', state.filters).then(function (payload) {
         if (API.isError(payload)) throw new Error(payload.error || 'API error');
         state.payload = payload;
         render(payload);
         document.body.classList.add('ready');
       }).catch(function () {
         showError();
+      }).then(function () {
+        Util.qsa('.dfilter__select').forEach(function (s) { s.disabled = false; });
       });
     }
 
     function render(payload) {
       var summary = payload.summary || {};
       var total = summary.totalRegistrations || 0;
+
+      if (ensureFilterOptions(payload)) {
+        // A URL filter didn't exist in the dataset: refetch unfiltered.
+        load();
+        return;
+      }
+
+      renderFilterStatus(payload);
 
       // HERO
       els.heroTotal.textContent = Util.fmtNumber(total);
@@ -237,8 +365,40 @@
     }
 
     function openActivity(activityName) {
-      var href = 'registrations.html?activity=' + encodeURIComponent(activityName);
-      window.location.href = href;
+      // Carry the active filters across so the board keeps its context.
+      var params = new URLSearchParams();
+      FILTER_FIELDS.forEach(function (f) {
+        if (state.filters[f.key]) params.set(f.key, state.filters[f.key]);
+      });
+      params.set('activity', activityName);
+      window.location.href = 'registrations.html?' + params.toString();
+    }
+
+    function applyFilter(key, value) {
+      state.filters[key] = value || '';
+      syncUrl();
+      load();
+    }
+
+    FILTER_FIELDS.forEach(function (f) {
+      if (!f.el) return;
+      // Reflect any filters restored from the URL on first paint.
+      f.el.value = state.filters[f.key] || '';
+      f.el.addEventListener('change', function () {
+        applyFilter(f.key, f.el.value);
+      });
+    });
+
+    if (els.filterReset) {
+      els.filterReset.addEventListener('click', function () {
+        if (!hasActiveFilters()) return;
+        FILTER_FIELDS.forEach(function (f) {
+          state.filters[f.key] = '';
+          if (f.el) f.el.value = '';
+        });
+        syncUrl();
+        load();
+      });
     }
 
     els.retry.addEventListener('click', load);

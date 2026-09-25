@@ -10,11 +10,19 @@
  * Dashboard payload: every aggregate the main page needs in ONE call.
  * Aggregates only — no PII, no images, no national IDs.
  */
-function getDashboardPayload_() {
+function getDashboardPayload_(params) {
+  var filters = readFilters_(params);
+  var active = filtersActive_(filters);
   var cache = CacheService.getScriptCache();
 
+  // Filtered views get their own cache slot so they never overwrite
+  // the canonical unfiltered payload.
+  var cacheKey = active
+    ? CACHE_KEY_DASHBOARD_FILTERED + '_' + filterSignature_(filters)
+    : CACHE_KEY_DASHBOARD;
+
   if (cache) {
-    var cached = cache.get(CACHE_KEY_DASHBOARD);
+    var cached = cache.get(cacheKey);
     if (cached) {
       try {
         var data = JSON.parse(cached);
@@ -23,19 +31,155 @@ function getDashboardPayload_() {
     }
   }
 
-  var payload = computeDashboard_();
+  var payload = computeDashboard_(filters, readFilterEcho_(params));
 
   if (cache) {
     try {
-      cache.put(CACHE_KEY_DASHBOARD, JSON.stringify(payload), CONFIG.CACHE_TTL_SECONDS);
+      cache.put(cacheKey, JSON.stringify(payload), CONFIG.CACHE_TTL_SECONDS);
     } catch (e) { /* caching is an optimisation, never a source of truth */ }
   }
 
   return payload;
 }
 
-function computeDashboard_() {
-  var rows = getRows_();
+/**
+ * Normalise the raw query-string filter values into a stable object.
+ * Empty / "all" values collapse to '' so they are simply ignored.
+ */
+function readFilters_(params) {
+  params = params || {};
+  return {
+    governorate: normalize_(params.governorate),
+    activity: normalize_(params.activity),
+    day: normalize_(params.day),
+    eventType: normalize_(params.eventType),
+    englishLevel: normalize_(params.englishLevel)
+  };
+}
+
+/**
+ * The ORIGINAL (trimmed) values as the client sent them, echoed back so the
+ * UI can highlight the active filters without re-normalising Arabic text.
+ */
+function readFilterEcho_(params) {
+  params = params || {};
+  return {
+    governorate: trimSafe_(params.governorate),
+    activity: trimSafe_(params.activity),
+    day: trimSafe_(params.day),
+    eventType: trimSafe_(params.eventType),
+    englishLevel: trimSafe_(params.englishLevel)
+  };
+}
+
+function filtersActive_(filters) {
+  return !!(
+    filters.governorate || filters.activity || filters.day ||
+    filters.eventType || filters.englishLevel
+  );
+}
+
+/** Short, stable hash so cache keys stay well under the 250-char limit. */
+function filterSignature_(filters) {
+  var parts = [
+    filters.governorate, filters.activity, filters.day,
+    filters.eventType, filters.englishLevel
+  ];
+  var raw = parts.join('|');
+  var h = 5381;
+  for (var i = 0; i < raw.length; i++) {
+    h = ((h << 5) + h + raw.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(36);
+}
+
+/**
+ * Apply the active filter set to the row set.
+ * All conditions are AND-ed. Shared by the dashboard and the
+ * registrations page so both surfaces always agree on what "filtered" means.
+ */
+function applyFilters_(rows, filters) {
+  if (!filtersActive_(filters)) return rows;
+
+  return rows.filter(function (row) {
+    if (filters.governorate && normalize_(trimSafe_(row[COLUMNS.GOVERNORATE])) !== filters.governorate) return false;
+    if (filters.eventType && normalize_(trimSafe_(row[COLUMNS.EVENT_TYPE])) !== filters.eventType) return false;
+    if (filters.englishLevel && normalize_(trimSafe_(row[COLUMNS.ENGLISH_LEVEL])) !== filters.englishLevel) return false;
+    if (filters.day && !dayMatches_(row[COLUMNS.DAY], filters.day)) return false;
+    if (filters.activity && !activityMatches_(row, filters.activity)) return false;
+    return true;
+  });
+}
+
+/**
+ * Day values can be long free text ("25 سبتمبر 2026"), so match exactly
+ * first and fall back to a containment test.
+ */
+function dayMatches_(value, dayNeedle) {
+  var raw = trimSafe_(value);
+  if (!raw) return false;
+  var norm = normalize_(raw);
+  if (norm === dayNeedle) return true;
+  return contains_(raw, dayNeedle);
+}
+
+/**
+ * Distinct values for every filter dropdown.
+ * Always computed from the FULL row set so the dropdowns never
+ * collapse to a single option once a filter is applied.
+ */
+function buildFilterOptions_(rows) {
+  return {
+    governorates: distinctValues_(rows, COLUMNS.GOVERNORATE),
+    eventTypes: distinctValues_(rows, COLUMNS.EVENT_TYPE),
+    englishLevels: distinctValues_(rows, COLUMNS.ENGLISH_LEVEL),
+    days: distinctValues_(rows, COLUMNS.DAY),
+    activities: distinctActivityNames_(rows)
+  };
+}
+
+function distinctValues_(rows, column) {
+  var seen = {};
+  var out = [];
+  rows.forEach(function (row) {
+    var v = trimSafe_(row[column]);
+    if (!v) return;
+    var norm = normalize_(v);
+    if (seen[norm]) return;
+    seen[norm] = true;
+    out.push(v);
+  });
+  out.sort(function (a, b) { return a.localeCompare(b, 'ar'); });
+  return out;
+}
+
+function distinctActivityNames_(rows) {
+  var seen = {};
+  var out = [];
+  rows.forEach(function (row) {
+    var raw = row[COLUMNS.ACTIVITY];
+    if (!raw) return;
+    var parsed = parseActivity_(raw);
+    if (!parsed) return;
+    var name = trimSafe_(parsed.name);
+    if (!name) return;
+    var norm = normalize_(name);
+    if (seen[norm]) return;
+    seen[norm] = true;
+    out.push(name);
+  });
+  out.sort(function (a, b) { return a.localeCompare(b, 'ar'); });
+  return out;
+}
+
+function computeDashboard_(filters, echo) {
+  filters = filters || readFilters_(null);
+  echo = echo || {};
+
+  var allRows = getRows_();
+  var totalUnfiltered = allRows.length;
+
+  var rows = applyFilters_(allRows, filters);
   var total = rows.length;
 
   var activities = aggregateActivities_(rows, total);
@@ -53,11 +197,15 @@ function computeDashboard_() {
     generatedAt: new Date().toISOString(),
     summary: {
       totalRegistrations: total,
+      totalUnfiltered: totalUnfiltered,
+      isFiltered: filtersActive_(filters),
       uniqueActivities: activities.length,
       governorates: governorates.length,
       activeDays: dateCounts.length,
       lastSubmissionAt: lastAt
     },
+    filters: echo,
+    options: buildFilterOptions_(allRows),
     activities: activities,
     governorates: governorates,
     daily: daily,
@@ -344,19 +492,9 @@ function getRegistrationsPage_(params) {
   );
 
   var search = normalize_(params.search);
-  var gov = normalize_(params.governorate);
-  var eventType = normalize_(params.eventType);
-  var englishLevel = normalize_(params.englishLevel);
-  var day = normalize_(params.day);
-  var activity = normalize_(params.activity);
 
-  var filtered = rows.filter(function (row) {
-    if (gov && normalize_(trimSafe_(row[COLUMNS.GOVERNORATE])) !== gov) return false;
-    if (eventType && normalize_(trimSafe_(row[COLUMNS.EVENT_TYPE])) !== eventType) return false;
-    if (englishLevel && normalize_(trimSafe_(row[COLUMNS.ENGLISH_LEVEL])) !== englishLevel) return false;
-    if (day && !contains_(trimSafe_(row[COLUMNS.DAY]), day)) return false;
-    if (activity && !activityMatches_(row, activity)) return false;
-
+  // Same filter semantics as the dashboard: one shared implementation.
+  var filtered = applyFilters_(rows, readFilters_(params)).filter(function (row) {
     if (search && !rowMatchesSearch_(row, search)) return false;
     return true;
   });
