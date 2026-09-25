@@ -114,6 +114,36 @@
   margin: 0;
 }
 
+.dfilter__busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--blue);
+}
+
+.dfilter__busy[hidden] {
+  display: none;
+}
+
+.dfilter__spin {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(11, 92, 178, 0.25);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: dfilter-spin 0.7s linear infinite;
+}
+
+@keyframes dfilter-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dfilter__spin { animation-duration: 2.4s; }
+}
+
 .dfilter__hint {
   margin: 0;
   font-size: 0.78rem;
@@ -201,6 +231,11 @@
 
 .dfilter__status.is-active {
   color: var(--blue);
+  font-weight: 700;
+}
+
+.dfilter__status.is-stale {
+  color: #B45309;
   font-weight: 700;
 }
 

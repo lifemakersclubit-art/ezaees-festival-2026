@@ -25,6 +25,13 @@
       englishLevel: 'كل المستويات'
     };
 
+    // Aggregates only. Bump the suffix if the payload shape ever changes.
+var CACHE_PREFIX = 'ezaees_dash_v1:';
+var MAX_CACHED_VIEWS = 8;
+/* A filter combo that was already confirmed this recently is trusted as-is:
+   re-selecting it paints from cache and skips the network entirely. */
+var FRESH_MS = 60000;
+
     var els = {
       error: Util.qs('#errorState'),
       retry: Util.qs('#retryBtn'),
@@ -49,7 +56,8 @@
       filterEventType: Util.qs('#dFilterEventType'),
       filterLevel: Util.qs('#dFilterLevel'),
       filterReset: Util.qs('#dFilterReset'),
-      filterStatus: Util.qs('#dFilterStatus')
+      filterStatus: Util.qs('#dFilterStatus'),
+      filterBusy: Util.qs('#dFilterBusy')
     };
 
     // Filter field -> (select element, API parameter name, dropdown options key)
@@ -61,7 +69,20 @@
       { el: els.filterLevel, key: 'englishLevel', options: 'englishLevels' }
     ];
 
-    var state = { payload: null, filters: readFiltersFromUrl(), optionsReady: false };
+    var state = {
+      payload: null,
+      filters: readFiltersFromUrl(),
+      optionsReady: false,
+      generation: 0,
+      inFlight: {}
+    };
+
+    // Start the network call the moment this script executes, not at
+    // DOMContentLoaded. A cold Apps Script execution is ~20s; every second
+    // we overlap with rendering is a second the board doesn't wait.
+    var bootPrefetch = hasActiveFilters()
+      ? null
+      : API.prefetch('dashboard', state.filters);
 
     function readFiltersFromUrl() {
       var params = new URLSearchParams(window.location.search);
@@ -137,6 +158,8 @@
     function renderFilterStatus(payload) {
       if (!els.filterStatus) return;
 
+      els.filterStatus.classList.remove('is-stale');
+
       if (!hasActiveFilters()) {
         els.filterStatus.textContent = '';
         els.filterStatus.classList.remove('is-active');
@@ -171,21 +194,190 @@
       Util.qsa('.reveal').forEach(function (el) { el.classList.remove('is-error'); });
     }
 
-    function load() {
-      hideError();
-      document.body.classList.remove('ready');
-      Util.qsa('.dfilter__select').forEach(function (s) { s.disabled = true; });
+    /** Shown when a refresh failed but we still have something on screen. */
+    function showStaleNotice() {
+      if (!els.filterStatus) return;
+      els.filterStatus.classList.add('is-stale');
+      els.filterStatus.textContent = 'تعذّر التحديث — الأرقام المعروضة محفوظة من آخر تحميل ناجح';
+    }
 
-      API.get('dashboard', state.filters).then(function (payload) {
+    /* ---------------------------------------------------------- *
+     * View cache (aggregates only — never rows, never PII)
+     * ---------------------------------------------------------- *
+     * The dashboard payload is a set of counts. Keeping the last few
+     * rendered views means a repeat visit, or flipping back to a filter
+     * you already used, paints instantly instead of waiting on Apps
+     * Script. Every entry is revalidated in the background anyway.
+     */
+
+    function viewKey(filters) {
+      return FILTER_FIELDS.map(function (f) { return filters[f.key] || ''; }).join('\u0001');
+    }
+
+    function readView(key) {
+      try {
+        var raw = window.localStorage.getItem(CACHE_PREFIX + key);
+        if (!raw) return null;
+        var rec = JSON.parse(raw);
+        if (!rec || !rec.payload || rec.payload.success !== true) return null;
+        return rec;
+      } catch (e) {
+        return null; // private mode / quota — cache is a nicety, not a requirement
+      }
+    }
+
+    function isFresh(rec) {
+      return !!rec && typeof rec.at === 'number' && (Date.now() - rec.at) < FRESH_MS;
+    }
+
+    function writeView(key, payload) {
+      try {
+        window.localStorage.setItem(CACHE_PREFIX + key, JSON.stringify({
+          at: Date.now(),
+          payload: payload
+        }));
+      } catch (e) { /* ignore */ }
+      pruneViews(key);
+    }
+
+    function pruneViews(keepKey) {
+      try {
+        var entries = [];
+        for (var i = 0; i < window.localStorage.length; i++) {
+          var k = window.localStorage.key(i);
+          if (!k || k.indexOf(CACHE_PREFIX) !== 0) continue;
+          var raw = window.localStorage.getItem(k);
+          var at = 0;
+          try { at = (JSON.parse(raw) || {}).at || 0; } catch (e) { at = 0; }
+          entries.push({ k: k, at: at });
+        }
+        entries.sort(function (a, b) { return b.at - a.at; });
+        for (var j = MAX_CACHED_VIEWS; j < entries.length; j++) {
+          if (entries[j].k === CACHE_PREFIX + keepKey) continue;
+          window.localStorage.removeItem(entries[j].k);
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    function setBusy(on) {
+      if (els.filterBusy) els.filterBusy.hidden = !on;
+    }
+
+    /**
+     * Fetch one view. `initial` only controls the page-level entrance
+     * animation — a re-filter NEVER replays it, which is what used to make
+     * the whole dashboard blink and re-animate on every filter change.
+     */
+    function requestView(initial, prefetched) {
+      var key = viewKey(state.filters);
+
+      if (state.inFlight[key]) return;
+      state.inFlight[key] = true;
+
+      var gen = ++state.generation;
+      setBusy(true);
+      // Animate only on a genuine cold first load. A filter change must
+      // repaint in place, otherwise every filter click re-runs the page's
+      // entrance animation, which is exactly the stutter we're removing.
+      Charts.setAnimation(!!initial);
+
+      var pending = prefetched || API.get('dashboard', state.filters);
+
+      pending.then(function (payload) {
+        delete state.inFlight[key];
+        if (gen !== state.generation) return; // superseded by a newer filter
         if (API.isError(payload)) throw new Error(payload.error || 'API error');
+
         state.payload = payload;
+        writeView(key, payload);
         render(payload);
         document.body.classList.add('ready');
+        hideError();
+        painted();
       }).catch(function () {
-        showError();
+        delete state.inFlight[key];
+        if (gen !== state.generation) return;
+
+        // A failed refresh must not blank the board: fall back to the
+        // cached view and say so quietly.
+        var stale = readView(key);
+        if (stale) {
+          state.payload = stale.payload;
+          render(stale.payload);
+          document.body.classList.add('ready');
+          showStaleNotice();
+        } else {
+          showError();
+        }
+        painted();
       }).then(function () {
-        Util.qsa('.dfilter__select').forEach(function (s) { s.disabled = false; });
+        if (gen !== state.generation) return;
+        setBusy(false);
+        Charts.setAnimation(true);
       });
+    }
+
+    /** Tell the splash the board has real content on screen. */
+    function painted() {
+      if (Util && typeof Util.markDataReady === 'function') Util.markDataReady();
+    }
+
+    function load() {
+      hideError();
+
+      var key = viewKey(state.filters);
+      var cached = readView(key);
+
+      if (cached) {
+        // Paint instantly, then quietly revalidate behind the scenes.
+        Charts.setAnimation(false);
+        state.payload = cached.payload;
+        render(cached.payload);
+        document.body.classList.add('ready');
+        painted();
+      } else {
+        // Genuine first visit: let the entrance animation play once.
+        document.body.classList.remove('ready');
+      }
+
+      // Reuse the request already started at script-parse time, if any.
+      var prefetched = bootPrefetch;
+      bootPrefetch = null;
+
+      // A very recent entry was confirmed moments ago; don't re-ask.
+      if (isFresh(cached)) {
+        return;
+      }
+
+      requestView(!cached, prefetched);
+    }
+
+    /** Filter change: cached views paint instantly, live ones refresh in place. */
+    function applyFilter(key, value) {
+      state.filters[key] = value || '';
+      syncUrl();
+
+      var viewKey_ = viewKey(state.filters);
+      var cached = readView(viewKey_);
+
+      if (cached) {
+        // Cached views are the whole point of the cache: repaint them with
+        // no motion, so flipping back to a filter feels instant.
+        Charts.setAnimation(false);
+        state.payload = cached.payload;
+        render(cached.payload);
+        document.body.classList.add('ready');
+        hideError();
+
+        // Same combo, already confirmed: the paint above is the whole job.
+        if (isFresh(cached)) {
+          Charts.setAnimation(true);
+          renderFilterStatus(cached.payload);
+          return;
+        }
+      }
+
+      requestView(false);
     }
 
     function render(payload) {
@@ -194,7 +386,10 @@
 
       if (ensureFilterOptions(payload)) {
         // A URL filter didn't exist in the dataset: refetch unfiltered.
-        load();
+        state.filters = readFiltersFromUrl();
+        FILTER_FIELDS.forEach(function (f) { if (f.el) f.el.value = ''; });
+        syncUrl();
+        requestView(false);
         return;
       }
 
@@ -374,12 +569,6 @@
       window.location.href = 'registrations.html?' + params.toString();
     }
 
-    function applyFilter(key, value) {
-      state.filters[key] = value || '';
-      syncUrl();
-      load();
-    }
-
     FILTER_FIELDS.forEach(function (f) {
       if (!f.el) return;
       // Reflect any filters restored from the URL on first paint.
@@ -397,7 +586,16 @@
           if (f.el) f.el.value = '';
         });
         syncUrl();
-        load();
+        // Clearing filters is a refresh, not a first load.
+        var cached = readView(viewKey(state.filters));
+        if (cached) {
+          Charts.setAnimation(false);
+          state.payload = cached.payload;
+          render(cached.payload);
+          document.body.classList.add('ready');
+          hideError();
+        }
+        requestView(false);
       });
     }
 

@@ -17,9 +17,11 @@ var CONFIG = {
   // The exact sheet (tab) name that holds the KoboToolbox export.
   SHEET_NAME: 'ALLDATA',
 
-  // Short TTL: keeps the dashboard quasi-real-time without hammering Sheets.
+  // 5 minutes: a cold Apps Script execution costs ~20s, so a long TTL is
+  // what actually makes the board feel fast. The client revalidates
+  // opportunistically and shows a spinner while it does.
   // Aggregates only. NEVER used for raw rows or PII.
-  CACHE_TTL_SECONDS: 85,
+  CACHE_TTL_SECONDS: 300,
 
   DEFAULT_PAGE_SIZE: 50,
   MAX_PAGE_SIZE: 250,

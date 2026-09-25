@@ -50,6 +50,15 @@ var Util = (function () {
     return parseInt(m[3], 10) + ' ' + MONTHS_SHORT[month] + ' ' + m[1] + ' · ' + m[4] + ':' + m[5];
   }
 
+  function decodeQueryComponent(v) {
+    // application/x-www-form-urlencoded treats '+' as a space, and
+    // URLSearchParams (which dashboard.js uses) writes it that way. Plain
+    // decodeURIComponent does not, so a shared dashboard URL opened on the
+    // registrations page would keep literal '+' inside Arabic day/activity
+    // names. Normalise to the same behaviour as URLSearchParams.
+    return decodeURIComponent(String(v).replace(/\+/g, '%20'));
+  }
+
   function getQueryParams(source) {
     var search = (typeof source === 'string' && source.indexOf('?') === 0)
       ? source
@@ -60,8 +69,8 @@ var Util = (function () {
     parts.forEach(function (part) {
       if (!part) return;
       var kv = part.split('=');
-      var key = decodeURIComponent(kv[0]);
-      var val = kv.length > 1 ? decodeURIComponent(kv.slice(1).join('=')) : '';
+      var key = decodeQueryComponent(kv[0]);
+      var val = kv.length > 1 ? decodeQueryComponent(kv.slice(1).join('=')) : '';
       if (val !== '') out[key] = val;
     });
     return out;
@@ -109,9 +118,17 @@ var Util = (function () {
 
 /**
  * ============================================================
- * Splash controller — shows the Lifemakers logo + credits for
- * the first 3 seconds (covers data loading), then fades out.
- * Both pages load utils.js, so this runs automatically.
+ * Splash controller — shows the Lifemakers logo + credits while the
+ * board is loading, then fades out.
+ *
+ * Both pages load utils.js, so this runs automatically. A page signals
+ * "I have painted" with Util.markDataReady() and the splash goes away
+ * immediately; the timers below are only a safety net.
+ *
+ * NOTE: this used to be duplicated in two IIFEs, and the second copy
+ * listened for 'dataReady' while markDataReady() dispatched 'DataReady'.
+ * Nothing ever called markDataReady(), so the splash always burned the
+ * full MAX_SHOW on every load — a fixed multi-second tax on startup.
  * ============================================================
  */
 (function () {
@@ -122,66 +139,41 @@ var Util = (function () {
     else document.addEventListener('DOMContentLoaded', fn);
   }
 
-  var MIN_SHOW = 3000;   // أقل مدة: 3 ثوانٍ فعلية (تغطي تحميل الداتا كما طلبت)
-  var MAX_SHOW = 4500;   // سقف أمان: يُخفى مهما حدث لو تعطل التحميل (يعطي 3s أساسية)
+  // Just long enough to avoid a one-frame flash, nothing more.
+  var MIN_SHOW = 500;
+  // Safety net: never trap the user behind the logo if a page forgets to
+  // signal, or the API is slow (a cold Apps Script start is ~20s).
+  var MAX_SHOW = 3000;
 
   ready(function () {
-    var splash = Util.qs('#splash');
+    var splash = Util.qs('#splash') || document.querySelector('.splash');
     if (!splash) return;
+
     var started = Date.now();
     var done = false;
 
     function hide() {
       if (done) return;
       done = true;
-      splash.classList.add('splash--hide');
-      setTimeout(function () {
-        if (splash.parentNode) splash.parentNode.removeChild(splash);
-      }, 650);
+      if (splash.parentNode) splash.parentNode.removeChild(splash);
     }
 
-    // 1) التحميل اكتمل → يُخفي بعد الحد الأدنى إن لم يمرّ بعد.
-    document.addEventListener('DataReady', function () {
+    function dismiss() {
+      if (done) return;
       var waited = Date.now() - started;
       setTimeout(hide, Math.max(0, MIN_SHOW - waited));
-    });
+    }
 
-    // 2) سقف أمان: أقصى 4 ثوانٍ مهما حدث (يغطي 3 ثوانٍ، ويسقط
-    //    تلقائيًا لو تعطل الـ API أو لم تُبعث إشارة DataReady).
+    // The page has painted: stop showing the logo.
+    document.addEventListener('DataReady', dismiss);
+
     setTimeout(hide, MAX_SHOW);
   });
 
-  /**
-   * Page responsible to call Util.markDataReady() once the real data
-   * has rendered, so the Splash hides as soon as possible (min 1.8s).
-   */
-  function markDataReady() {
+  /** Pages call this once they have rendered real content (or a real error). */
+  Util.markDataReady = function () {
     document.dispatchEvent(new Event('DataReady'));
-  }
-
-  ready(function () {
-    var splash = document.querySelector('.splash');
-    if (!splash) return;
-
-    // Always hide after 3s (covers slow networks/loading).
-    var timer = setTimeout(hide, 3000);
-
-    // If data finishes earlier, still respect the 3s minimum,
-    // but cap the wait so nothing blocks the page forever.
-    document.addEventListener('dataReady', function () {
-      clearTimeout(timer);
-      setTimeout(hide, 300);
-    });
-
-    function hide() {
-      if (splash.classList.contains('splash--hide')) return;
-      splash.classList.add('splash--hide');
-      setTimeout(function () {
-        var parent = splash.parentNode;
-        if (parent) parent.removeChild(splash);
-      }, 700);
-    }
-  });
+  };
 })();
 
 /**

@@ -114,6 +114,9 @@
         renderPagination();
         renderSummary();
         syncUrl();
+
+        // First real content on screen: let the splash go.
+        if (Util && typeof Util.markDataReady === 'function') Util.markDataReady();
       });
     }
 
@@ -217,6 +220,7 @@
     function showError() {
       els.error.hidden = false;
       els.body.innerHTML = '<tr><td colspan="9" class="table-empty">—</td></tr>';
+      if (Util && typeof Util.markDataReady === 'function') Util.markDataReady();
     }
 
     // UI wiring -------------------------------------------------
@@ -252,8 +256,11 @@
     // Boot ------------------------------------------------------
     syncInputsFromState();
 
-    loadMeta()
-      .then(function () { return loadPage(); })
-      .catch(showError);
+    // Meta only fills the filter dropdowns and the "last updated" footer, so
+    // the table must not wait for it. Chaining these serially meant two Apps
+    // Script round trips back to back — on a cold start that is ~40s before
+    // any row appears. Run them together; if meta fails the table still shows.
+    loadMeta().catch(function () { /* footer/options degrade, rows still load */ });
+    loadPage().catch(showError);
   });
 })();

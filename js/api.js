@@ -115,6 +115,17 @@ var API = (function () {
   }
 
   /**
+   * Begin the dashboard request as early as the script tag allows, so the
+   * ~20s cold start overlaps page rendering instead of starting after it.
+   * The returned promise is the one controllers should await.
+   */
+  function prefetch(action, params) {
+    var p = get(action, params);
+    window.__EZAEES_PREFETCH__ = p;
+    return p;
+  }
+
+  /**
    * Backstop helper: is this payload an explicit API error object?
    */
   function isError(payload) {
@@ -123,6 +134,7 @@ var API = (function () {
 
   return {
     get: get,
+    prefetch: prefetch,
     buildUrl: buildUrl,
     isError: isError
   };
