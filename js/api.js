@@ -153,6 +153,12 @@ function importDemoData(action, params) {
 
   var payload = { success: true, demo: true, generatedAt: new Date().toISOString() };
 
+  if (action === 'rows') {
+    // Same compact projection the real backend returns, so the demo
+    // exercises the exact code path production uses.
+    return Promise.resolve(buildDemoRows_(demo));
+  }
+
   if (action === 'dashboard' || action === 'activities' || action === 'governorates' || action === 'daily') {
     return Promise.resolve(buildDemoDashboard_(demo, params));
   }
@@ -190,6 +196,64 @@ function importDemoData(action, params) {
 /* ---------------------------------------------------------- *
  * Demo dashboard with the same filter semantics as the backend
  * ---------------------------------------------------------- */
+
+/**
+ * Project the demo rows into the backend's positional array format so the
+ * demo path runs the identical FilterEngine code as production.
+ */
+function buildDemoRows_(demo) {
+  var rows = demo.rows.map(function (r) {
+    var a = r.activity || {};
+    return [
+      r.governorate || '',
+      r.eventType || '',
+      r.englishLevel || '',
+      r.day || '',
+      a.name || '',
+      a.time || '',
+      a.location || '',
+      a.language || '',
+      a.duration || '',
+      a.org || '',
+      r.submissionTime || ''
+    ];
+  });
+
+  function distinct(field) {
+    var seen = {};
+    var out = [];
+    rows.forEach(function (row) {
+      var v = (row[field] || '').trim();
+      if (!v) return;
+      var k = demoNormalize_(v);
+      if (seen[k]) return;
+      seen[k] = true;
+      out.push(v);
+    });
+    out.sort(function (x, y) { return x.localeCompare(y, 'ar'); });
+    return out;
+  }
+
+  return {
+    success: true,
+    demo: true,
+    generatedAt: new Date().toISOString(),
+    fields: [
+      'governorate', 'eventType', 'englishLevel', 'day', 'activityName',
+      'activityTime', 'activityLocation', 'activityLanguage',
+      'activityDuration', 'activityOrg', 'submittedAt'
+    ],
+    options: {
+      governorates: distinct(0),
+      eventTypes: distinct(1),
+      englishLevels: distinct(2),
+      days: distinct(3),
+      activities: distinct(4)
+    },
+    totalUnfiltered: rows.length,
+    rows: rows
+  };
+}
 
 function demoNormalize_(value) {
   if (value === null || value === undefined) return '';

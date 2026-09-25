@@ -69,6 +69,9 @@ function route_(params, e) {
       case ACTION.REGISTRATIONS:
         return response_(getRegistrationsPage_(params), params.callback);
 
+      case ACTION.ROWS:
+        return response_(getRowProjection_(), params.callback);
+
       default:
         return response_(errorPayload_('Unknown action: ' + action), params.callback);
     }

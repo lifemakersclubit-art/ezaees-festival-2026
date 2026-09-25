@@ -46,7 +46,8 @@ var ACTION = {
   ACTIVITIES: 'activities',
   GOVERNORATES: 'governorates',
   DAILY: 'daily',
-  REGISTRATIONS: 'registrations'
+  REGISTRATIONS: 'registrations',
+  ROWS: 'rows'
 };
 
 /**
@@ -96,6 +97,30 @@ var CACHE_KEY_DASHBOARD = 'ezaees_dashboard_' + CONFIG.API_VERSION;
  * applying a filter never overwrites the canonical unfiltered payload.
  */
 var CACHE_KEY_DASHBOARD_FILTERED = 'ezaees_dash_f_' + CONFIG.API_VERSION;
+
+/**
+ * The whole dataset, projected down to the columns the dashboard filters on.
+ * One key for every filter combination: the client re-aggregates locally.
+ */
+var CACHE_KEY_ROWS = 'ezaees_dash_rows_' + CONFIG.API_VERSION;
+
+/**
+ * Column order for the row projection. Index 0..N must match the array built
+ * in getRowProjection_() exactly — the client maps positionally.
+ */
+var ROW_FIELDS_ = [
+  'governorate',
+  'eventType',
+  'englishLevel',
+  'day',
+  'activityName',
+  'activityTime',
+  'activityLocation',
+  'activityLanguage',
+  'activityDuration',
+  'activityOrg',
+  'submittedAt'
+];
 
 // =================== SOURCE FILE: Utils.gs (SHARED UTILITIES) ===================
 /**
@@ -348,6 +373,78 @@ function getRows_() {
  * All counting / grouping / aggregation / parsing happens here,
  * server-side. The browser never receives the raw dataset.
  */
+
+/* ---------------------------------------------------------- *
+ * Row projection: the dataset behind every filter
+ * ---------------------------------------------------------- */
+
+/**
+ * Hand the browser the handful of columns the dashboard filters and charts
+ * actually need, so it can re-aggregate locally and a filter click never
+ * waits on a 2-25s Apps Script round trip.
+ *
+ * Privacy: this is a *projection*, not a row dump. Name, phone, national ID,
+ * email and every other column are read but never emitted — only the five
+ * filter dimensions plus the submission timestamp. The registrations table
+ * still gets its rows from /registrations, which masks PII server-side.
+ *
+ * Padded to a fixed-width array instead of an object per row: with a few
+ * thousand registrations this is a few tens of KB and parses in one shot.
+ */
+function getRowProjection_() {
+  var cache = CacheService.getScriptCache();
+
+  if (cache) {
+    var cached = cache.get(CACHE_KEY_ROWS);
+    if (cached) {
+      try {
+        var data = JSON.parse(cached);
+        if (data && data.rows) return data;
+      } catch (e) { /* stale/corrupt cache -> recompute */ }
+    }
+  }
+
+  var allRows = getRows_();
+
+  // ROW_FIELDS_ and this loop must stay in lockstep.
+  var rows = allRows.map(function (row) {
+    var parsed = row[COLUMNS.ACTIVITY] ? parseActivity_(row[COLUMNS.ACTIVITY]) : null;
+    return [
+      trimSafe_(row[COLUMNS.GOVERNORATE]),
+      trimSafe_(row[COLUMNS.EVENT_TYPE]),
+      trimSafe_(row[COLUMNS.ENGLISH_LEVEL]),
+      trimSafe_(row[COLUMNS.DAY]),
+      parsed ? trimSafe_(parsed.name) : '',
+      parsed ? (parsed.time || '') : '',
+      parsed ? (parsed.location || '') : '',
+      parsed ? (parsed.language || '') : '',
+      parsed ? (parsed.duration || '') : '',
+      parsed ? (parsed.org || '') : '',
+      normalizeTimestamp_(row[COLUMNS.SUBMISSION_TIME])
+    ];
+  });
+
+  var payload = {
+    success: true,
+    demo: false,
+    generatedAt: new Date().toISOString(),
+    fields: ROW_FIELDS_.slice(),
+    options: buildFilterOptions_(allRows),
+    totalUnfiltered: allRows.length,
+    rows: rows
+  };
+
+  if (cache) {
+    try {
+      cache.put(CACHE_KEY_ROWS, JSON.stringify(payload), CONFIG.CACHE_TTL_SECONDS);
+    } catch (e) {
+      // ScriptCache caps an entry at ~100KB. A bigger dataset just means the
+      // client falls back to per-filter requests, so degrade quietly.
+    }
+  }
+
+  return payload;
+}
 
 /**
  * Dashboard payload: every aggregate the main page needs in ONE call.
@@ -1024,6 +1121,9 @@ function route_(params, e) {
 
       case ACTION.REGISTRATIONS:
         return response_(getRegistrationsPage_(params), params.callback);
+
+      case ACTION.ROWS:
+        return response_(getRowProjection_(), params.callback);
 
       default:
         return response_(errorPayload_('Unknown action: ' + action), params.callback);

@@ -31,6 +31,10 @@ var MAX_CACHED_VIEWS = 8;
 /* A filter combo that was already confirmed this recently is trusted as-is:
    re-selecting it paints from cache and skips the network entirely. */
 var FRESH_MS = 60000;
+    /* The row projection backs every view, so it gets its own slot and a
+       longer life than individual cached views. */
+var DATASET_KEY = 'ezaees_dash_rows_v1';
+var DATASET_TTL_MS = 10 * 60 * 1000;
 
     var els = {
       error: Util.qs('#errorState'),
@@ -74,15 +78,20 @@ var FRESH_MS = 60000;
       filters: readFiltersFromUrl(),
       optionsReady: false,
       generation: 0,
-      inFlight: {}
+      inFlight: {},
+      // The whole dataset, projected down to filter columns. Once loaded,
+      // every filter is a local recompute — no network per combination.
+      dataset: null
     };
 
     // Start the network call the moment this script executes, not at
     // DOMContentLoaded. A cold Apps Script execution is ~20s; every second
     // we overlap with rendering is a second the board doesn't wait.
+    // The rows projection is filter-independent, so it is the only thing
+    // worth prefetching — the server aggregates it locally from there on.
     var bootPrefetch = hasActiveFilters()
       ? null
-      : API.prefetch('dashboard', state.filters);
+      : API.prefetch('rows');
 
     function readFiltersFromUrl() {
       var params = new URLSearchParams(window.location.search);
@@ -264,9 +273,91 @@ var FRESH_MS = 60000;
     }
 
     /**
-     * Fetch one view. `initial` only controls the page-level entrance
-     * animation — a re-filter NEVER replays it, which is what used to make
-     * the whole dashboard blink and re-animate on every filter change.
+     * Fetch the whole dataset ONCE. Every filter after this is local.
+     * Falls back to null if the server has no /rows endpoint yet, in which
+     * case the caller keeps using the old per-filter request path.
+     */
+    function loadDataset(prefetched) {
+      if (state.datasetPromise) return state.datasetPromise;
+
+      // A projection cached by a previous visit makes the board usable
+      // offline and removes the cold-start wait on a re-visit entirely.
+      var stored = readDatasetCache();
+      if (stored) {
+        state.dataset = stored;
+        state.datasetPromise = Promise.resolve(stored);
+        return state.datasetPromise;
+      }
+
+      var pending = prefetched || API.get('rows');
+      state.datasetPromise = pending.then(function (payload) {
+        if (API.isError(payload)) throw new Error(payload.error || 'API error');
+        if (!payload || !payload.rows || !payload.rows.length) {
+          throw new Error('empty row projection');
+        }
+        state.dataset = payload;
+        writeDatasetCache(payload);
+        return payload;
+      }).catch(function (err) {
+        state.datasetPromise = null; // let a later filter retry the fetch
+        throw err;
+      });
+
+      return state.datasetPromise;
+    }
+
+    /**
+     * The projection carries no PII — only filter columns — so caching it
+     * is safe. It is stored under its own key and never pruned with the
+     * per-view cache, because it backs every view.
+     */
+    function readDatasetCache() {
+      try {
+        var raw = window.localStorage.getItem(DATASET_KEY);
+        if (!raw) return null;
+        var rec = JSON.parse(raw);
+        if (!rec || !rec.payload || !rec.payload.rows || !rec.payload.rows.length) return null;
+        if (typeof rec.at !== 'number' || (Date.now() - rec.at) > DATASET_TTL_MS) return null;
+        return rec.payload;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function writeDatasetCache(payload) {
+      try {
+        window.localStorage.setItem(DATASET_KEY, JSON.stringify({
+          at: Date.now(),
+          payload: payload
+        }));
+      } catch (e) { /* quota or private mode — the cache is optional */ }
+    }
+
+    /** Recompute the dashboard from the local dataset. Synchronous. */
+    function payloadFor(filters) {
+      return FilterEngine.buildPayload(state.dataset, filters || state.filters);
+    }
+
+    function applyLocalView(initial) {
+      var payload = payloadFor(state.filters);
+
+      // Animation order matters: it must be OFF *before* render() so the charts
+      // pick it up, then restored *after* so the next genuine first load is
+      // still allowed to animate.
+      Charts.setAnimation(!!initial);
+      state.payload = payload;
+      render(payload);
+      Charts.setAnimation(true);
+
+      document.body.classList.add('ready');
+      hideError();
+      painted();
+      return payload;
+    }
+
+    /**
+     * Old path: one server request per filter combination. Kept as a
+     * fallback for browsers that never got a usable /rows payload.
      */
     function requestView(initial, prefetched) {
       var key = viewKey(state.filters);
@@ -276,9 +367,6 @@ var FRESH_MS = 60000;
 
       var gen = ++state.generation;
       setBusy(true);
-      // Animate only on a genuine cold first load. A filter change must
-      // repaint in place, otherwise every filter click re-runs the page's
-      // entrance animation, which is exactly the stutter we're removing.
       Charts.setAnimation(!!initial);
 
       var pending = prefetched || API.get('dashboard', state.filters);
@@ -325,59 +413,86 @@ var FRESH_MS = 60000;
     function load() {
       hideError();
 
+      // Paint a confirmed-fresh cached view instantly, then revalidate.
       var key = viewKey(state.filters);
       var cached = readView(key);
 
+      if (cached && isFresh(cached)) {
+        Charts.setAnimation(false);
+        state.payload = cached.payload;
+        render(cached.payload);
+        document.body.classList.add('ready');
+        painted();
+        // Keep the rows projection warm in the background so the very
+        // first filter click is already instant.
+        if (!state.dataset) loadDataset().catch(function () {});
+        renderFilterStatus(cached.payload);
+        return;
+      }
+
       if (cached) {
-        // Paint instantly, then quietly revalidate behind the scenes.
         Charts.setAnimation(false);
         state.payload = cached.payload;
         render(cached.payload);
         document.body.classList.add('ready');
         painted();
       } else {
-        // Genuine first visit: let the entrance animation play once.
         document.body.classList.remove('ready');
       }
 
-      // Reuse the request already started at script-parse time, if any.
       var prefetched = bootPrefetch;
       bootPrefetch = null;
 
-      // A very recent entry was confirmed moments ago; don't re-ask.
-      if (isFresh(cached)) {
-        return;
-      }
-
-      requestView(!cached, prefetched);
+      loadDataset(prefetched).then(function () {
+        // The dataset just arrived: aggregate the current filter set from
+        // it. No second request, no waiting.
+        var payload = applyLocalView(!cached);
+        writeView(viewKey(state.filters), payload);
+        renderFilterStatus(payload);
+      }).catch(function () {
+        // /rows unavailable (older backend): fall back to per-filter calls.
+        requestView(!cached, null);
+      });
     }
 
-    /** Filter change: cached views paint instantly, live ones refresh in place. */
+    /**
+     * Filter change. With the dataset loaded this is a synchronous local
+     * recompute, so the board updates in the same frame as the click.
+     */
     function applyFilter(key, value) {
       state.filters[key] = value || '';
       syncUrl();
 
-      var viewKey_ = viewKey(state.filters);
-      var cached = readView(viewKey_);
+      if (state.dataset) {
+        var payload = applyLocalView(false);
+        writeView(viewKey(state.filters), payload);
+        renderFilterStatus(payload);
+        return;
+      }
 
+      // No dataset yet: try to build it, otherwise use the request path.
+      var cached = readView(viewKey(state.filters));
       if (cached) {
-        // Cached views are the whole point of the cache: repaint them with
-        // no motion, so flipping back to a filter feels instant.
         Charts.setAnimation(false);
         state.payload = cached.payload;
         render(cached.payload);
         document.body.classList.add('ready');
         hideError();
-
-        // Same combo, already confirmed: the paint above is the whole job.
         if (isFresh(cached)) {
           Charts.setAnimation(true);
           renderFilterStatus(cached.payload);
+          loadDataset().catch(function () {});
           return;
         }
       }
 
-      requestView(false);
+      loadDataset().then(function () {
+        var local = applyLocalView(false);
+        writeView(viewKey(state.filters), local);
+        renderFilterStatus(local);
+      }).catch(function () {
+        requestView(false);
+      });
     }
 
     function render(payload) {

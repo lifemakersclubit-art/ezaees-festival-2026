@@ -53,6 +53,7 @@ ezaees-festival-dashboard/
 │   ├── api.js            # عميل الـ API (fetch + fallback JSONP)
 │   ├── utils.js          # أدوات العرض (والـ demo الواضح عند تفعيله)
 │   ├── activity-parser.js# تنسيق عرض بيانات العروض (التحليل الحقيقي في Backend)
+│   ├── filter-engine.js   # ⬅ نسخة من التجميع تُشغَّل في المتصفح: كل فلتر <3ms بلا شبكة
 │   ├── charts.js         # غلاف Chart.js (5 أنواع رسوم)
 │   ├── dashboard.js      # منطق صفحة index
 │   └── registrations.js  # منطق صفحة التسجيلات
@@ -81,6 +82,7 @@ ezaees-festival-dashboard/
 | Endpoint | الوصف |
 |---|---|
 | `?action=dashboard` | جميع إحصائيات الـ Dashboard في **طلب واحد**: summary + activities + governorates + daily + englishLevels + eventTypes |
+| `?action=rows` | إسقاط الصفوف لأعمدة الفلترة فقط (بدون أي PII) — يُجلب مرة واحدة، ثم يعيد المتصفح حساب كل الإحصائيات محليًا في <3ms بدل 2-25s لكل تركيبة فلاتر |
 | `?action=registrations&page=&pageSize=&search=&governorate=&eventType=&englishLevel=&day=&activity=` | صفحات التسجيلات — بحث/فلاتر/ترقيم **داخل الخادم** |
 | `?action=activities` | شريحة تحليل العروض |
 | `?action=governorates` | شريحة التوزيع الجغرافي |

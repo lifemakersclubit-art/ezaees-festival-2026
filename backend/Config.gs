@@ -37,7 +37,8 @@ var ACTION = {
   ACTIVITIES: 'activities',
   GOVERNORATES: 'governorates',
   DAILY: 'daily',
-  REGISTRATIONS: 'registrations'
+  REGISTRATIONS: 'registrations',
+  ROWS: 'rows'
 };
 
 /**
@@ -87,3 +88,27 @@ var CACHE_KEY_DASHBOARD = 'ezaees_dashboard_' + CONFIG.API_VERSION;
  * applying a filter never overwrites the canonical unfiltered payload.
  */
 var CACHE_KEY_DASHBOARD_FILTERED = 'ezaees_dash_f_' + CONFIG.API_VERSION;
+
+/**
+ * The whole dataset, projected down to the columns the dashboard filters on.
+ * One key for every filter combination: the client re-aggregates locally.
+ */
+var CACHE_KEY_ROWS = 'ezaees_dash_rows_' + CONFIG.API_VERSION;
+
+/**
+ * Column order for the row projection. Index 0..N must match the array built
+ * in getRowProjection_() exactly — the client maps positionally.
+ */
+var ROW_FIELDS_ = [
+  'governorate',
+  'eventType',
+  'englishLevel',
+  'day',
+  'activityName',
+  'activityTime',
+  'activityLocation',
+  'activityLanguage',
+  'activityDuration',
+  'activityOrg',
+  'submittedAt'
+];
